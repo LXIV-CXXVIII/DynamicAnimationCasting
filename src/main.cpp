@@ -1,4 +1,7 @@
-﻿#include "C:/dev/ExamplePlugin-CommonLibSSE/build/simpleini-master/SimpleIni.h"
+﻿#include <toml++/toml.h>
+
+#include "Project/Casting/DynamicAnimationCasting.h"
+#include "Project/framework.h"
 
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface * a_skse, SKSE::PluginInfo * a_info)
 {
@@ -10,7 +13,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface * 
         return false;
     }
 
-    *path /= "loki_NoFollowerAttackCollision.log"sv;
+    *path /= "loki_DynamicAnimationCasting.log"sv;
     auto sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true);
 #endif
 
@@ -26,10 +29,10 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface * 
     spdlog::set_default_logger(std::move(log));
     spdlog::set_pattern("%g(%#): [%^%l%$] %v"s);
 
-    logger::info("loki_NoFollowerAttackCollision v1.0.0");
+    logger::info("loki_DynamicAnimationCasting v1.0.0");
 
     a_info->infoVersion = SKSE::PluginInfo::kVersion;
-    a_info->name = "loki_NoFollowerAttackCollision";
+    a_info->name = "loki_DynamicAnimationCasting";
     a_info->version = 1;
 
     if (a_skse->IsEditor()) {
@@ -49,24 +52,40 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface * 
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message) {
 
     switch (message->type) {
-    case SKSE::MessagingInterface::kNewGame:
-    case SKSE::MessagingInterface::kPostLoadGame: {
-        break;
-    }
-    case SKSE::MessagingInterface::kPostLoad: {
-        break;
-    }
-    default:
-        break;
+        case SKSE::MessagingInterface::kDataLoaded: {
+            
+        }
+        case SKSE::MessagingInterface::kNewGame: {
+            break;
+        }
+        case SKSE::MessagingInterface::kPostLoadGame: {
+            auto ptr = Loki::DynamicAnimationCasting::GetSingleton();
+            logger::info("Injecting Graph Event Sink Hooks");
+            ptr->InstallGraphEventSink2ElectricBoogaloo();
+            break;
+        }
+        case SKSE::MessagingInterface::kPostLoad: {
+            break;
+        }
+        case SKSE::MessagingInterface::kPostPostLoad: {
+            break;
+        }
+        default:
+            break;
     }
 
 }
 
 extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface * a_skse)
 {
-    logger::info("Climbing loaded");
+    logger::info("loki_DynamicAnimationCasting loaded");
     SKSE::Init(a_skse);
-    SKSE::AllocTrampoline(16);
+    SKSE::AllocTrampoline(32);
+
+    auto messaging = SKSE::GetMessagingInterface();
+    if (!messaging->RegisterListener("SKSE", SKSEMessageHandler)) { // add callbacks for TrueHUD
+        return false;
+    }
 
     return true;
 }
