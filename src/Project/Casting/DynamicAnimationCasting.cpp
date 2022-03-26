@@ -28,6 +28,9 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
             bool hasIt = false;
             if (auto dhandle = RE::TESDataHandler::GetSingleton(); dhandle) {
                 for (auto& ae : *activeEffect) {
+                    if (!ae) {
+                        break;
+                    }
                     if (!ae->effect) {
                         continue;
                     }
@@ -49,7 +52,7 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
     auto weapon = a_actor->GetEquippedObject(false);
     if (weapon) { 
         id = weapon->formID;
-        type = actor->GetEquippedObject(false)->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
+        type = weapon->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
     };
     if (auto handle = RE::TESDataHandler::GetSingleton(); handle) {
 
@@ -69,8 +72,6 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
                         
                             auto vkeyword = handle->LookupForm<RE::BGSKeyword>(_properties.keywordPair.first, _properties.keywordPair.second);
                             if (_properties.keywordPair.first == -1 || _properties.keywordPair.first == 0 || (vkeyword && actor->HasKeyword(vkeyword))) {
-                            
-                                auto type = actor->GetEquippedObject(false)->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
 
                                 logger::info("Passed all conditional checks, subtracting costs and casting spells now...");
 
@@ -80,17 +81,18 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
 
                                 for (auto spell : _properties.spells) {
                                     for (auto it = spell.second.begin(); it < spell.second.end(); ++it) {
-                                        auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str());
-                                        logger::info("Casting Spell ' {} ' now", single->GetFullName());
-                                        actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->Cast(
-                                            single,                                     // spell
-                                            false,                                      // noHitEffectArt
-                                            _properties.targetCaster ? actor : nullptr, // target
-                                            1.00f,                                      // effectiveness
-                                            false,                                      // hostileEffectivenessOnly
-                                            0.0f,                                       // magnitude override
-                                            _properties.targetCaster ? nullptr : actor  // cause
-                                        );
+                                        if (auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str())) {
+                                            logger::info("Casting Spell ' {} ' now", single->GetFullName());
+                                                actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->Cast(
+                                                    single,                                     // spell
+                                                    false,                                      // noHitEffectArt
+                                                    _properties.targetCaster ? actor : nullptr, // target
+                                                    1.00f,                                      // effectiveness
+                                                    false,                                      // hostileEffectivenessOnly
+                                                    0.0f,                                       // magnitude override
+                                                    _properties.targetCaster ? nullptr : actor  // cause
+                                                );
+                                        }
                                     }
                                 }
 
