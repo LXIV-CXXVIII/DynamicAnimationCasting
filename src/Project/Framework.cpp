@@ -22,14 +22,23 @@ RE::BSEventNotifyControl Loki::DynamicAnimationCasting::HookedProcessEvent(RE::B
 
         auto actorPtr = a_event.holder->As<RE::Actor>();
 
-        for (auto idx : DynamicAnimationCasting::_eventMap) {
+        for (auto idx : DynamicAnimationCasting::_eventVector) {
         
             if (a_event.tag == (RE::BSFixedString)idx.first) {
                 logger::info("Event Found: {}", a_event.tag);
                 idx.second->CastSpells(actorPtr);
             }
-
+        
         }
+
+        //for (auto idx : DynamicAnimationCasting::_eventMap) {
+        
+            //if (a_event.tag == (RE::BSFixedString)idx.first) {
+            //    logger::info("Event Found: {}", a_event.tag);
+            //    idx.second->CastSpells(actorPtr);
+            //}
+
+        //}
 
         //for (auto idx = DynamicAnimationCasting::_eventMap.begin(); idx != DynamicAnimationCasting::_eventMap.end(); ++idx) {
 
