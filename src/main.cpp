@@ -53,15 +53,15 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message* message) {
 
     switch (message->type) {
         case SKSE::MessagingInterface::kDataLoaded: {
-            
+            auto ptr = Loki::DynamicAnimationCasting::GetSingleton();
+            logger::info("Injecting Graph Event Sink Hooks");
+            ptr->InstallGraphEventSink2ElectricBoogaloo();
+            break;
         }
         case SKSE::MessagingInterface::kNewGame: {
             break;
         }
         case SKSE::MessagingInterface::kPostLoadGame: {
-            auto ptr = Loki::DynamicAnimationCasting::GetSingleton();
-            logger::info("Injecting Graph Event Sink Hooks");
-            ptr->InstallGraphEventSink2ElectricBoogaloo();
             break;
         }
         case SKSE::MessagingInterface::kPostLoad: {

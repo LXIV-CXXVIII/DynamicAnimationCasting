@@ -13,12 +13,12 @@ namespace Loki {
 		public:
 			struct Properties {
 				std::unordered_map<std::string, std::vector<std::int32_t>> spells = {};
-				std::pair<std::int32_t, std::string> racePair;
-				std::pair<std::int32_t, std::string> actorPair;
-				std::pair<std::int32_t, std::string> weapPair;
-				std::uint32_t                        weapType;
-				std::pair<std::int32_t, std::string> effectPair;
-				std::pair<std::int32_t, std::string> keywordPair;
+				std::pair<std::int32_t, std::string>                       racePair;
+				std::pair<std::int32_t, std::string>                       actorPair;
+				std::pair<std::string, std::pair<RE::FormID, RE::FormID>>  weapPair;
+				std::int32_t                                               weapType;
+				std::pair<std::int32_t, std::string>                       effectPair;
+				std::pair<std::int32_t, std::string>                       keywordPair;
 				bool  targetCaster = false;
 				float healthCost   = 0.00f;
 				float staminaCost  = 0.00f;
@@ -27,12 +27,12 @@ namespace Loki {
 
 			Cast(
 				std::unordered_map<std::string, std::vector<std::int32_t>> a_spells,
-				std::pair<std::int32_t, std::string> a_racePair,
-				std::pair<std::int32_t, std::string> a_actorPair,
-				std::pair<std::int32_t, std::string> a_weapPair,
-				std::uint32_t                        a_weapType,
-				std::pair<std::int32_t, std::string> a_effectPair,
-				std::pair<std::int32_t, std::string> a_keywordPair,
+				std::pair<std::int32_t, std::string>                       a_racePair,
+				std::pair<std::int32_t, std::string>                       a_actorPair,
+				std::pair<std::string, std::pair<RE::FormID, RE::FormID>>  a_weapPair,
+				std::int32_t                                               a_weapType,
+				std::pair<std::int32_t, std::string>                       a_effectPair,
+				std::pair<std::int32_t, std::string>                       a_keywordPair,
 				bool a_targetCaster, 
 				float a_hCost, float a_sCost, float a_mCost
 			) {

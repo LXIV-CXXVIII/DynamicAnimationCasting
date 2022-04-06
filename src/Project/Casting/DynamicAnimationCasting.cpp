@@ -21,7 +21,6 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
     }
     if (failed) { return; }
 
-    //static RE::Effect* ActorHasEffectWithKeyword(RE::Actor* a_actor, RE::FormID a_formID);
     auto HasEffect = [actor](RE::FormID a_id) -> bool {
         auto activeEffect = actor->GetActiveEffectList();
         if (activeEffect) {
@@ -46,14 +45,21 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
         }
     };
 
-    logger::info("Passed requirement check");
-    RE::FormID id = 0;
-    RE::WEAPON_TYPE type = {};
-    auto weapon = a_actor->GetEquippedObject(false);
-    if (weapon) { 
-        id = weapon->formID;
-        type = weapon->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
+    RE::FormID r_id = 0;
+    RE::FormID l_id = 0;
+    RE::WEAPON_TYPE r_type = {};
+    RE::WEAPON_TYPE l_type = {};
+    auto r_weapon = a_actor->GetEquippedObject(false);
+    if (r_weapon) {
+        r_id = r_weapon->formID;
+        r_type = r_weapon->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
     };
+    auto l_weapon = a_actor->GetEquippedObject(true);
+    if (l_weapon) {
+        l_id = l_weapon->formID;
+        l_type = r_weapon->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
+    }
+
     if (auto handle = RE::TESDataHandler::GetSingleton(); handle) {
 
         auto vrace = handle->LookupForm<RE::TESRace>(_properties.racePair.first, _properties.racePair.second);
@@ -61,28 +67,35 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
         
             auto vactor = handle->LookupForm<RE::Actor>(_properties.actorPair.first, _properties.actorPair.second);
             if (_properties.actorPair.first == -1 || _properties.actorPair.first == 0 || (vactor && vactor->formID == actor->formID)) {
-            
-                auto vweapon = handle->LookupForm<RE::TESObjectWEAP>(_properties.weapPair.first, _properties.weapPair.second);
-                if (_properties.weapPair.first == -1 || _properties.weapPair.first == 0 || (vweapon && vweapon->formID == id)) {
+
+
+                auto vRWeapon = handle->LookupForm<RE::TESObjectWEAP>(_properties.weapPair.second.first, _properties.weapPair.first);
+                if (_properties.weapPair.second.first == -1 || _properties.weapPair.second.first == 0 || (vRWeapon && vRWeapon->formID == r_id)) {
                 
-                    if (_properties.weapType == -1 || _properties.weapType == 0 || (RE::WEAPON_TYPE)_properties.weapType == type) {
-                    
-                        auto veffect = handle->LookupForm<RE::EffectSetting>(_properties.effectPair.first, _properties.effectPair.second);
-                        if (_properties.effectPair.first == -1 || _properties.effectPair.first == 0 || (veffect && HasEffect(veffect->formID))) {
+                    auto vLWeapon = handle->LookupForm<RE::TESObjectWEAP>(_properties.weapPair.second.second, _properties.weapPair.first);
+                    if (_properties.weapPair.second.second == -1 || _properties.weapPair.second.second == -1 || (vLWeapon && vLWeapon->formID == l_id)) {
+
+
+                        if (_properties.weapType == -1 || _properties.weapType == 0 || 
+                            (RE::WEAPON_TYPE)_properties.weapType == r_type || (RE::WEAPON_TYPE)_properties.weapType == l_type) {
+
                         
-                            auto vkeyword = handle->LookupForm<RE::BGSKeyword>(_properties.keywordPair.first, _properties.keywordPair.second);
-                            if (_properties.keywordPair.first == -1 || _properties.keywordPair.first == 0 || (vkeyword && actor->HasKeyword(vkeyword))) {
+                            auto veffect = handle->LookupForm<RE::EffectSetting>(_properties.effectPair.first, _properties.effectPair.second);
+                            if (_properties.effectPair.first == -1 || _properties.effectPair.first == 0 || (veffect && HasEffect(veffect->formID))) {
 
-                                logger::info("Passed all conditional checks, subtracting costs and casting spells now...");
+                                auto vkeyword = handle->LookupForm<RE::BGSKeyword>(_properties.keywordPair.first, _properties.keywordPair.second);
+                                if (_properties.keywordPair.first == -1 || _properties.keywordPair.first == 0 || (vkeyword && actor->HasKeyword(vkeyword))) {
 
-                                actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, _properties.healthCost * -1.00f);
-                                actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, _properties.magickaCost * -1.00f);
-                                actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, _properties.staminaCost * -1.00f);
+                                    logger::info("Passed all conditional checks, subtracting costs and casting spells now...");
 
-                                for (auto spell : _properties.spells) {
-                                    for (auto it = spell.second.begin(); it < spell.second.end(); ++it) {
-                                        if (auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str())) {
-                                            logger::info("Casting Spell ' {} ' now", single->GetFullName());
+                                    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, _properties.healthCost * -1.00f);
+                                    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, _properties.magickaCost * -1.00f);
+                                    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, _properties.staminaCost * -1.00f);
+
+                                    for (auto spell : _properties.spells) {
+                                        for (auto it = spell.second.begin(); it < spell.second.end(); ++it) {
+                                            if (auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str())) {
+                                                logger::info("Casting Spell ' {} ' now", single->GetFullName());
                                                 actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->Cast(
                                                     single,                                     // spell
                                                     false,                                      // noHitEffectArt
@@ -92,19 +105,21 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
                                                     0.0f,                                       // magnitude override
                                                     _properties.targetCaster ? nullptr : actor  // cause
                                                 );
+                                            }
                                         }
                                     }
-                                }
 
-                                logger::info("... Finished casting spells.");
-                            
-                            } else { logger::info("keyword check failed"); }
+                                    logger::info("... Finished casting spells.");
 
-                        } else { logger::info("effect check failed"); }
+                                } else { logger::info("keyword check failed"); }
+
+                            } else { logger::info("effect check failed"); }
+                        
+                        } else { logger::info("weapon type check failed"); }
                     
-                    } else { logger::info("weapon type check failed"); }
+                    } else { logger::info("Left weapon check failed"); }
                 
-                } else { logger::info("weapon check failed"); }
+                } else { logger::info("Right weapon check failed"); }
             
             } else { logger::info("actor check failed"); }
 

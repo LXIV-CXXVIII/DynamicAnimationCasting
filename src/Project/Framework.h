@@ -39,13 +39,16 @@ namespace Loki {
                           logger::info("Actor ESP name -> {}", *actorEspName);
                             std::pair<RE::FormID, std::string> actorPair = { *actorFormID, *actorEspName };
 
-                        auto weapFormID = eventTable["HasWeaponFormID"].value<std::int32_t>();
-                          logger::info("Weapon Form ID -> {0:#x}", *weapFormID);
+                        auto weapFormID = eventTable["IsEquippedRightFormID"].value<std::int32_t>();
+                          logger::info("Right Form ID -> {0:#x}", *weapFormID);
+                        auto weapFormID2 = eventTable["IsEquippedLeftFormID"].value<std::int32_t>();
+                          logger::info("Left Form ID -> {0:#x}", *weapFormID2);
                         auto weapEspName = eventTable["WeaponEspName"].value<std::string>();
                           logger::info("Weapon ESP name -> {}", *weapEspName);
-                            std::pair<RE::FormID, std::string> weapPair = { *weapFormID, *weapEspName };
+                            std::pair<RE::FormID, RE::FormID> pair = { *weapFormID, *weapFormID2 };
+                            std::pair<std::string, std::pair<RE::FormID, RE::FormID>> weapPair = { *weapEspName, pair };
 
-                        auto weapontype = eventTable["HasWeaponType"].value<std::uint32_t>();
+                        auto weapontype = eventTable["HasWeaponType"].value<std::int32_t>();
                           logger::info("Weapon Type -> {}", *weapontype);
                         auto weapType = *weapontype;
 
@@ -96,7 +99,8 @@ namespace Loki {
                             *magickaCost
                         );
 
-                        _eventMap.insert_or_assign(*event, cast);
+                        _eventMap.insert({*event, cast});
+
                     }
                     logger::info("Successfully read {}...", path.string());
 

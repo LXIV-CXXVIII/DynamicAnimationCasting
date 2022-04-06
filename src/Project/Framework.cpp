@@ -15,14 +15,31 @@ void Loki::DynamicAnimationCasting::InstallGraphEventSink2ElectricBoogaloo() {
 
 
 RE::BSEventNotifyControl Loki::DynamicAnimationCasting::HookedProcessEvent(RE::BSAnimationGraphEvent& a_event, RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_src) {
+
     fProcessEvent fn = fHash.at(*(std::uintptr_t*)this);
+
     if (a_event.tag != NULL && a_event.holder != NULL) {
+
         auto actorPtr = a_event.holder->As<RE::Actor>();
-        auto event = DynamicAnimationCasting::_eventMap.find((std::string)a_event.tag);
-        if (event != DynamicAnimationCasting::_eventMap.end()) {
-            logger::info("Event Found: {}", a_event.tag);
-            event->second->CastSpells(actorPtr);
-        } 
+
+        for (auto idx : DynamicAnimationCasting::_eventMap) {
+        
+            if (a_event.tag == (RE::BSFixedString)idx.first) {
+                logger::info("Event Found: {}", a_event.tag);
+                idx.second->CastSpells(actorPtr);
+            }
+
+        }
+
+        //for (auto idx = DynamicAnimationCasting::_eventMap.begin(); idx != DynamicAnimationCasting::_eventMap.end(); ++idx) {
+
+            //if (a_event.tag == (RE::BSFixedString)idx->first) {
+            //    logger::info("Event Found: {}", a_event.tag);
+            //    idx->second->CastSpells(actorPtr);
+            //}
+
+        //} // God I hope this is fast enough
+
     }
     return fn ? (this->*fn)(a_event, a_src) : RE::BSEventNotifyControl::kContinue;
 
