@@ -22,11 +22,13 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
     if (failed) { return; }
 
     auto HasEffect = [actor](RE::FormID a_id) -> bool {
-        auto activeEffect = actor->GetActiveEffectList();
-        if (activeEffect) {
+
+        if (auto activeEffect = actor->GetActiveEffectList()) {
+
             bool hasIt = false;
             if (auto dhandle = RE::TESDataHandler::GetSingleton(); dhandle) {
                 for (auto& ae : *activeEffect) {
+
                     if (!ae) {
                         break;
                     }
@@ -39,25 +41,30 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
                     if (ae->effect->baseEffect->formID == a_id) {
                         hasIt = true;
                     }
+
                 }
                 return hasIt;
             }
+
         }
+
     };
 
     RE::FormID r_id = 0;
     RE::FormID l_id = 0;
     RE::WEAPON_TYPE r_type = {};
     RE::WEAPON_TYPE l_type = {};
-    auto r_weapon = a_actor->GetEquippedObject(false);
-    if (r_weapon) {
+    if (auto r_weapon = a_actor->GetEquippedObject(false)) {
         r_id = r_weapon->formID;
-        r_type = r_weapon->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
-    };
-    auto l_weapon = a_actor->GetEquippedObject(true);
-    if (l_weapon) {
+        if (auto wep = r_weapon->As<RE::TESObjectWEAP>()) {
+            r_type = wep->weaponData.animationType.get();
+        }
+    }
+    if (auto l_weapon = a_actor->GetEquippedObject(true)) {
         l_id = l_weapon->formID;
-        l_type = r_weapon->As<RE::TESObjectWEAP>()->weaponData.animationType.get();
+        if (auto wep = l_weapon->As<RE::TESObjectWEAP>()) {
+            l_type = wep->weaponData.animationType.get();
+        }
     }
 
     if (auto handle = RE::TESDataHandler::GetSingleton(); handle) {
@@ -93,7 +100,9 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
                                     actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, _properties.staminaCost * -1.00f);
 
                                     for (auto spell : _properties.spells) {
+
                                         for (auto it = spell.second.begin(); it < spell.second.end(); ++it) {
+
                                             if (auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str())) {
                                                 logger::info("Casting Spell ' {} ' now", single->GetFullName());
                                                 actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->Cast(
@@ -106,7 +115,9 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
                                                     _properties.targetCaster ? nullptr : actor  // cause
                                                 );
                                             }
+
                                         }
+
                                     }
 
                                     logger::info("... Finished casting spells.");
