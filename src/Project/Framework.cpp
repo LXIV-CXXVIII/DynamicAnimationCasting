@@ -31,24 +31,6 @@ RE::BSEventNotifyControl Loki::DynamicAnimationCasting::HookedProcessEvent(RE::B
         
         }
 
-        //for (auto idx : DynamicAnimationCasting::_eventMap) {
-        
-            //if (a_event.tag == (RE::BSFixedString)idx.first) {
-            //    logger::info("Event Found: {}", a_event.tag);
-            //    idx.second->CastSpells(actorPtr);
-            //}
-
-        //}
-
-        //for (auto idx = DynamicAnimationCasting::_eventMap.begin(); idx != DynamicAnimationCasting::_eventMap.end(); ++idx) {
-
-            //if (a_event.tag == (RE::BSFixedString)idx->first) {
-            //    logger::info("Event Found: {}", a_event.tag);
-            //    idx->second->CastSpells(actorPtr);
-            //}
-
-        //} // God I hope this is fast enough
-
     }
     return fn ? (this->*fn)(a_event, a_src) : RE::BSEventNotifyControl::kContinue;
 

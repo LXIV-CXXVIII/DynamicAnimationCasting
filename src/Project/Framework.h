@@ -160,9 +160,6 @@ namespace Loki {
 
         static inline std::vector<std::pair<std::string, AnimationCasting::Cast*>> _eventVector ={};
 
-        static inline std::unordered_map<std::string, AnimationCasting::Cast*> _eventMap = {};
-        static inline std::unordered_map<std::string, std::vector<std::int32_t>> _spellMap = {};
-
     private:
 
     protected:
