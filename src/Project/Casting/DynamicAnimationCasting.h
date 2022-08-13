@@ -25,6 +25,15 @@ namespace Loki {
 				float magickaCost  = 0.00f;
 			};
 
+			struct Caches {
+                RE::TESRace* race = nullptr;
+                RE::Actor* actor = nullptr;
+                RE::TESObjectWEAP* weapon_r = nullptr;
+                RE::TESObjectWEAP* weapon_l = nullptr;
+                RE::EffectSetting* effect = nullptr;
+                RE::BGSKeyword* keyword = nullptr;
+			};
+
 			Cast(
 				std::unordered_map<std::string, std::vector<std::int32_t>> a_spells,
 				std::pair<std::int32_t, std::string>                       a_racePair,
@@ -36,27 +45,24 @@ namespace Loki {
 				bool a_targetCaster, 
 				float a_hCost, float a_sCost, float a_mCost
 			) {
-				_properties.racePair     = a_racePair;
-				_properties.actorPair    = a_actorPair;
-				_properties.weapPair     = a_weapPair;
-				_properties.weapType     = a_weapType;
-				_properties.effectPair   = a_effectPair;
-				_properties.keywordPair  = a_keywordPair;
-				_properties.spells       = a_spells;
+				_properties.racePair     = std::move(a_racePair);
+				_properties.actorPair    = std::move(a_actorPair);
+				_properties.weapPair     = std::move(a_weapPair);
+				_properties.weapType     = std::move(a_weapType);
+				_properties.effectPair   = std::move(a_effectPair);
+				_properties.keywordPair  = std::move(a_keywordPair);
+				_properties.spells       = std::move(a_spells);
 				_properties.targetCaster = a_targetCaster;
 				_properties.healthCost   = a_hCost;
 				_properties.staminaCost  = a_sCost;
 				_properties.magickaCost  = a_mCost;
-			}
-			virtual ~Cast() {
-			
 			}
 
 			void CastSpells(const RE::Actor* a_actor);
 
 		private:
 			Properties _properties;
-
+            std::optional<Caches> _caches;
 		};
 
 	};

@@ -47,7 +47,7 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
             }
 
         }
-
+        return false;
     };
 
     RE::FormID r_id = 0;
@@ -105,7 +105,7 @@ void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
 
                                             if (auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str())) {
                                                 logger::info("Casting Spell ' {} ' now", single->GetFullName());
-                                                actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->Cast(
+                                                actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(
                                                     single,                                     // spell
                                                     false,                                      // noHitEffectArt
                                                     _properties.targetCaster ? actor : nullptr, // target
