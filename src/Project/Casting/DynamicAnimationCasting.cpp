@@ -1,9 +1,8 @@
 #include "DynamicAnimationCasting.h"
 
 void Loki::HUD::FlashHUDMeter(RE::ActorValue a_av) {
-    using func_t = decltype(&Loki::HUD::FlashHUDMeter);
-    REL::Relocation<func_t> func{ REL::ID(51907) };
-    return func(a_av);
+    static REL::Relocation<decltype(FlashHUDMeter)> FlashHUDMenuMeter{RELOCATION_ID(51907, 52845)};
+    return FlashHUDMenuMeter(a_av);
 }
 
 void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
