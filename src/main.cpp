@@ -34,7 +34,7 @@ namespace {
             log = std::make_shared<spdlog::logger>(
                 "Global", std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true));
         }
-        log->set_level(spdlog::level::trace);
+        log->set_level(spdlog::level::warn);
         log->flush_on(spdlog::level::warn);
 
         spdlog::set_default_logger(std::move(log));
@@ -112,8 +112,6 @@ namespace {
         //trampoline.create(64);
         //log::trace("Trampoline initialized.");
 
-        Loki::DynamicAnimationCasting::LoadTomls();
-
         Loki::DynamicAnimationCasting::InstallGraphEventSink();
     }
 
@@ -151,6 +149,7 @@ namespace {
                                                            // active.
                         // It is now safe to access form data.
                         InitializeHooking();
+                        Loki::DynamicAnimationCasting::LoadTomls();
                         break;
 
                     // Skyrim game events.

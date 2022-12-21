@@ -7,62 +7,65 @@ namespace Loki {
 	};
 
 	namespace AnimationCasting {
+		using FormIdentifier = std::pair<std::int32_t, std::string>;
+        static constexpr int8_t kSpell = std::to_underlying(RE::WEAPON_TYPE::kCrossbow) + 1;
+        static constexpr int8_t kShield = std::to_underlying(RE::WEAPON_TYPE::kCrossbow) + 2;
+        static constexpr int8_t kTorch = std::to_underlying(RE::WEAPON_TYPE::kCrossbow) + 3;
 
-		class Cast {
+        struct WeaponTrigger {
+            RE::FormID formid = 0;
+            std::int8_t type = -1;
+            RE::BGSKeyword* keyword = nullptr;
+            RE::FormID enchant = 0;
+            float enchantCost = 0.f;
+            float enchantCostFactor = 0.f;
+            float enchantMagnitudeFactor = 0.f;
+            bool cast = true;
 
-		public:
-			struct Properties {
-				std::unordered_map<std::string, std::vector<std::int32_t>> spells = {};
-				std::pair<std::int32_t, std::string>                       racePair;
-				std::pair<std::int32_t, std::string>                       actorPair;
-				std::pair<std::string, std::pair<RE::FormID, RE::FormID>>  weapPair;
-				std::int32_t                                               weapType;
-				std::pair<std::int32_t, std::string>                       effectPair;
-				std::pair<std::int32_t, std::string>                       keywordPair;
-				bool  targetCaster = false;
-				float healthCost   = 0.00f;
-				float staminaCost  = 0.00f;
-				float magickaCost  = 0.00f;
-			};
+            bool Constrainted() const noexcept {
+                return formid >0 || type >=0 || keyword || enchant > 0; 
+            }
+        };
 
-			struct Caches {
-                RE::TESRace* race = nullptr;
-                RE::Actor* actor = nullptr;
-                RE::TESObjectWEAP* weapon_r = nullptr;
-                RE::TESObjectWEAP* weapon_l = nullptr;
-                RE::EffectSetting* effect = nullptr;
-                RE::BGSKeyword* keyword = nullptr;
-			};
+		struct CastTrigger {
+            RE::BSFixedString tag;  // event tag for triggering this spell
 
-			Cast(
-				std::unordered_map<std::string, std::vector<std::int32_t>> a_spells,
-				std::pair<std::int32_t, std::string>                       a_racePair,
-				std::pair<std::int32_t, std::string>                       a_actorPair,
-				std::pair<std::string, std::pair<RE::FormID, RE::FormID>>  a_weapPair,
-				std::int32_t                                               a_weapType,
-				std::pair<std::int32_t, std::string>                       a_effectPair,
-				std::pair<std::int32_t, std::string>                       a_keywordPair,
-				bool a_targetCaster, 
-				float a_hCost, float a_sCost, float a_mCost
-			) {
-				_properties.racePair     = std::move(a_racePair);
-				_properties.actorPair    = std::move(a_actorPair);
-				_properties.weapPair     = std::move(a_weapPair);
-				_properties.weapType     = std::move(a_weapType);
-				_properties.effectPair   = std::move(a_effectPair);
-				_properties.keywordPair  = std::move(a_keywordPair);
-				_properties.spells       = std::move(a_spells);
-				_properties.targetCaster = a_targetCaster;
-				_properties.healthCost   = a_hCost;
-				_properties.staminaCost  = a_sCost;
-				_properties.magickaCost  = a_mCost;
-			}
+            // Conditions
+            RE::FormID caster = 0;
+            RE::FormID race = 0;
+            RE::FormID effect = 0;
+            RE::BGSPerk* perk = nullptr;
+            RE::BGSKeyword* keyword = nullptr;
+            std::optional<bool> isOnMount;
+            std::optional<bool> isRunning;
+            std::optional<bool> isSneaking;
+            WeaponTrigger weapons[2];  // right, left
+            float chance = 1.0f;
 
-			void CastSpells(const RE::Actor* a_actor);
+            // Properties
+            bool targetCaster = false;
+            bool useWeaponCast = false;
+            bool castOffHandSpell = false;
+            bool castForeHandSpell = false;
+            bool castEquipedPower = false;
+            bool castFaviouriteMagic = false;
+            bool dualCasting = false;
+            float healthCost = 0.f;
+            float staminaCost = 0.f;
+            float magickaCost = 0.f;
+            float effectiveness = 1.f;
+            float baseMagnitude = 1.f;
+            float castMagickaCostFactor = 1.f;
 
-		private:
-			Properties _properties;
-            std::optional<Caches> _caches;
+            std::string spells_buffer;  // small_vector<RE::SpellItem*>, using std::string as the underlying data
+
+            bool HasWeaponConstraints() const { return weapons[0].Constrainted() || weapons[1].Constrainted(); }
+
+            auto Spells() {
+                return std::span {reinterpret_cast<RE::MagicItem**>(spells_buffer.data()), spells_buffer.size() / sizeof(RE::MagicItem*)};
+            }
+
+			void CastSpells(const RE::Actor* a_caster);
 		};
 
 	};

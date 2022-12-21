@@ -28,7 +28,7 @@ namespace Loki {
                                                         RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_src);
 
         static inline bool _TomlLoaded = false;
-        static inline std::vector<std::pair<RE::BSFixedString, AnimationCasting::Cast>> _eventVector = {};
+        static inline std::vector<AnimationCasting::CastTrigger> _CastTriggers = {};
     };
 
 };

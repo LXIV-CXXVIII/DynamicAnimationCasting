@@ -5,136 +5,266 @@ void Loki::HUD::FlashHUDMeter(RE::ActorValue a_av) {
     return FlashHUDMenuMeter(a_av);
 }
 
-void Loki::AnimationCasting::Cast::CastSpells(const RE::Actor* a_actor) {
+inline bool IsInvalidFormID (RE::FormID id) noexcept
+{ 
+    return id == 0 || id == static_cast<decltype(id)>(-1); 
+};
 
-	RE::Actor* actor = (RE::Actor*)a_actor;
+inline bool CheckFormID(RE::FormID required, auto getter) 
+{
+    return IsInvalidFormID(required) || required == getter();
+};
 
-    bool failed = false;
-    if (actor->GetActorValue(RE::ActorValue::kStamina) < _properties.staminaCost) {
-        logger::info("Failed kStamina check"); failed = true;
-        HUD::FlashHUDMeter(RE::ActorValue::kStamina);
-    }
-    if (actor->GetActorValue(RE::ActorValue::kMagicka) < _properties.magickaCost) {
-        logger::info("Failed kMagicka check"); failed = true;
-        HUD::FlashHUDMeter(RE::ActorValue::kMagicka);
-    }
-    if (failed) { return; }
-
-    auto HasEffect = [actor](RE::FormID a_id) -> bool {
-
-        if (auto activeEffect = actor->GetActiveEffectList()) {
-
-            bool hasIt = false;
-            if (auto dhandle = RE::TESDataHandler::GetSingleton(); dhandle) {
-                for (auto& ae : *activeEffect) {
-
-                    if (!ae) {
-                        break;
+RE::EnchantmentItem* GetEquipedObjectEnchantment(RE::Actor* actor, int hand) 
+{
+    RE::EnchantmentItem* enchantment = nullptr;
+    if (auto equipment = actor->GetEquippedObject(hand)) {
+        if (auto enchantable = equipment->As<RE::TESEnchantableForm>()) {
+            enchantment = enchantable->formEnchanting;
+        }
+        if (!enchantment) {
+            if (auto entry = actor->GetEquippedEntryData(hand)) {
+                if (entry->extraLists) {
+                    for (const auto& xList : *entry->extraLists) {
+                        if (const auto xEnch = xList->GetByType<RE::ExtraEnchantment>()) {
+                            enchantment = xEnch->enchantment;
+                        }
                     }
-                    if (!ae->effect) {
-                        continue;
-                    }
-                    if (!ae->effect->baseEffect) {
-                        continue;
-                    }
-                    if (ae->effect->baseEffect->formID == a_id) {
-                        hasIt = true;
-                    }
-
                 }
-                return hasIt;
+            }
+        }
+    }
+    return enchantment;
+};
+
+RE::FormID GetEnchantmentEffectId(RE::EnchantmentItem* enchantment)
+{
+    if (enchantment) {
+        if (enchantment->data.baseEnchantment) {
+            enchantment = enchantment->data.baseEnchantment;
+        }
+        if (auto effect = enchantment->GetCostliestEffectItem()) {
+            if (auto base_effect = effect->baseEffect) {
+                return base_effect->formID;
+            }
+        }
+    }
+    return 0;
+};
+
+bool DoesActorHasEffect(RE::Actor* actor, RE::FormID a_id)
+{
+    if (auto activeEffect = actor->AsMagicTarget()->GetActiveEffectList()) {
+        bool hasIt = false;
+        for (auto& ae : *activeEffect) {
+            if (!ae) {
+                break;
+            }
+            if (!ae->effect) {
+                continue;
+            }
+            if (!ae->effect->baseEffect) {
+                continue;
+            }
+            if (ae->effect->baseEffect->formID == a_id) {
+                hasIt = true;
+            }
+        }
+        return hasIt;
+    }
+    return false;
+};
+
+void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster) 
+{
+    RE::Actor * const actor = const_cast<RE::Actor*>(a_caster);
+
+    // faster rejection for player only event
+    if (!CheckFormID(caster, [&]() { return actor->formID; }) ||
+        !CheckFormID(race, [&] { return actor->GetRace()->formID; })) {
+        return;
+    }
+
+    // Character status queries
+    if (isOnMount.has_value() && isOnMount.value() != actor->IsOnMount()) {
+        return;
+    }
+
+    if (isSneaking.has_value() && isSneaking.value() != actor->IsSneaking()) {
+        return;
+    }
+
+    if (isRunning.has_value() && isRunning.value() != actor->IsRunning()) {
+        return;
+    }
+
+    RE::ActorValueOwner* actorAV = actor->AsActorValueOwner();
+    const RE::Actor::ACTOR_RUNTIME_DATA& actorRD = actor->GetActorRuntimeData();
+
+    if (staminaCost > 0.f && actorAV->GetActorValue(RE::ActorValue::kStamina) < staminaCost) {
+        HUD::FlashHUDMeter(RE::ActorValue::kStamina);
+        return;
+    }
+
+    if (healthCost > 0.f && actorAV->GetActorValue(RE::ActorValue::kHealth) < healthCost) {
+        HUD::FlashHUDMeter(RE::ActorValue::kHealth);
+        return;
+    }
+
+    float actorMagicka = actorAV->GetActorValue(RE::ActorValue::kMagicka);
+    if (magickaCost > 0.f && actorMagicka < magickaCost) {
+        HUD::FlashHUDMeter(RE::ActorValue::kMagicka);
+        return;
+    }
+
+    if (perk && !actor->HasPerk(perk) || keyword && !actor->HasKeyword(keyword)) {
+        return;
+    }
+
+    // Check the active effect is slow
+    if (!IsInvalidFormID(effect) && DoesActorHasEffect(actor, effect)) {
+        return;
+    }
+
+    auto CastSpells = [&](RE::MagicSystem::CastingSource source, float magnitude, bool dual_casting) {
+        // logger::info("Passed all conditional checks, subtracting costs and casting spells now...");
+
+        actorAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, healthCost * -1.00f);
+        actorAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, staminaCost * -1.00f);
+        float totalMagikaCost = this->magickaCost;
+
+        auto magicCaster = actor->GetMagicCaster(source);
+        if (!magicCaster) return;
+        
+        // Casting from weapon tip
+        magicCaster->SetDualCasting(dual_casting);
+        if ((int)source < 2) {
+            if (auto actorMagicCaster = dynamic_cast<RE::ActorMagicCaster*>(magicCaster)) {
+                if (auto root = actor->Get3D()) {
+                    static constexpr std::string_view NodeNames[2] = {"WEAPON"sv, "SHIELD"sv};
+                    if (auto weaponBone = root->GetObjectByName(NodeNames[(int)source == 0])) {
+                        if (auto weapNode = weaponBone->AsNode()) {
+                            // Use Precision's weapon tip node if aviable
+                            if (weapNode->GetChildren().size() > 0) {
+                                weapNode = weapNode->GetChildren().front()->AsNode();
+                            }
+                            actorMagicCaster->magicNode = weapNode;
+                        }
+                    }
+                }
+            }
+        }
+
+        auto CastOneSpell = [&](RE::MagicItem* spell) {
+            if (!spell) return false;
+            float spellCost = spell->CalculateMagickaCost(actor) * this->castMagickaCostFactor;
+            if (actorMagicka < totalMagikaCost + spellCost) {
+                HUD::FlashHUDMeter(RE::ActorValue::kMagicka);
+                return false;
+            }
+            totalMagikaCost += spellCost;
+
+            // logger::info("Casting Spell ' {} ' now", spell->GetFullName());
+            bool targetSelf = spell->GetDelivery() == RE::MagicSystem::Delivery::kSelf;
+            RE::Actor* target = targetSelf ? actor : actor->GetActorRuntimeData().currentCombatTarget.get().get();
+            float magnitudeOverride = magnitude;
+            if (auto* effect = spell->GetCostliestEffectItem()) {
+                magnitudeOverride = effect->GetMagnitude() * magnitude;
             }
 
+            magicCaster->CastSpellImmediate(spell,                        // spell
+                                            false,                        // noHitEffectArt
+                                            target,                       // target
+                                            effectiveness,                // effectiveness
+                                            false,                        // hostileEffectivenessOnly
+                                            magnitudeOverride,            // magnitude override
+                                            targetSelf ? nullptr : actor  // cause
+            );
+            return true;
+        };
+
+        if ((int)source < 2) {
+            if (castForeHandSpell) {
+                if (auto spell = actorRD.selectedSpells[(int)source]) {
+                    CastOneSpell(spell->As<RE::MagicItem>());
+                }
+            }
+            if (castOffHandSpell) {
+                if (auto spell = actorRD.selectedSpells[!(int)source]) {
+                    CastOneSpell(spell->As<RE::MagicItem>());
+                }
+            }
         }
-        return false;
+
+        if (castEquipedPower) {
+            if (auto power = actorRD.selectedPower) {
+                auto spell = power->As<RE::MagicItem>();
+                if (!spell) {
+                    auto shout = power->As<RE::TESShout>();
+                    // how to check the words unlocked ???
+                    spell = shout->variations[RE::TESShout::VariationIDs::kThree].spell;
+                }
+                CastOneSpell(spell);
+            }
+        }
+
+        for (auto spell : Spells()) {
+            if (!CastOneSpell(spell)) break;
+        }
+
+        actorAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, totalMagikaCost * -1.00f);
     };
 
-    RE::FormID r_id = 0;
-    RE::FormID l_id = 0;
-    RE::WEAPON_TYPE r_type = {};
-    RE::WEAPON_TYPE l_type = {};
-    if (auto r_weapon = a_actor->GetEquippedObject(false)) {
-        r_id = r_weapon->formID;
-        if (auto wep = r_weapon->As<RE::TESObjectWEAP>()) {
-            r_type = wep->weaponData.animationType.get();
+    if (HasWeaponConstraints()) {
+        for (int hand = 0; hand < 2; hand++) {
+            auto castingSource = static_cast<RE::MagicSystem::CastingSource>(!hand);
+            if (auto equipment = actor->GetEquippedObject(hand)) {
+                if (!CheckFormID(weapons[hand].formid, [&] { return equipment->formID; }))
+                    continue;
+
+                auto GetEquipmentType = [](RE::TESForm* equipment) -> std::int8_t {
+                    if (auto weapon = equipment->As<RE::TESObjectWEAP>()) {
+                        return (int8_t)weapon->weaponData.animationType.underlying();
+                    } else if (equipment->As<RE::SpellItem>()) {
+                        return kSpell;  // Spell or Scroll as 10th weapon type
+                    } else if (equipment->As<RE::TESObjectARMO>()) {
+                        return kShield;
+                    } else if (equipment->As<RE::TESObjectARMO>()) {
+                        return kTorch;
+                    }
+                    return -1;
+                };
+
+                auto EquipmentHasKeyword = [](RE::TESForm* equipment, const RE::BGSKeyword* keyword) {
+                    if (auto kwform = equipment->As<RE::BGSKeywordForm>()) {
+                        return kwform->HasKeyword(keyword);
+                    }
+                    return false;
+                };
+
+                if (weapons[hand].type >= 0 && weapons[hand].type != GetEquipmentType(equipment))
+                    continue;
+
+                RE::EnchantmentItem* enchantment = nullptr;  // weapon enchantment
+                if (!IsInvalidFormID(weapons[hand].enchant)) {
+                    enchantment = GetEquipedObjectEnchantment(actor, hand);
+                }
+                if (!CheckFormID(weapons[hand].enchant, [&] { return GetEnchantmentEffectId(enchantment); })) continue;
+
+                if (weapons[hand].keyword && !EquipmentHasKeyword(equipment, weapons[hand].keyword)) continue;
+
+                if (weapons[hand].cast) {
+                    float magnitudeModifier = baseMagnitude;
+                    if (enchantment) {
+                        if (auto effect = enchantment->GetCostliestEffectItem()) {
+                            magnitudeModifier += effect->GetMagnitude() * weapons[hand].enchantMagnitudeFactor;
+                        }
+                    }
+                    CastSpells(castingSource, magnitudeModifier, dualCasting);
+                }
+            }
         }
+    } else {
+        CastSpells(RE::MagicSystem::CastingSource::kInstant, baseMagnitude, dualCasting);
     }
-    if (auto l_weapon = a_actor->GetEquippedObject(true)) {
-        l_id = l_weapon->formID;
-        if (auto wep = l_weapon->As<RE::TESObjectWEAP>()) {
-            l_type = wep->weaponData.animationType.get();
-        }
-    }
-
-    if (auto handle = RE::TESDataHandler::GetSingleton(); handle) {
-
-        auto vrace = handle->LookupForm<RE::TESRace>(_properties.racePair.first, _properties.racePair.second);
-        if (_properties.racePair.first == -1 || _properties.racePair.first == 0 || (vrace && vrace->formID == actor->race->formID)) {
-        
-            auto vactor = handle->LookupForm<RE::Actor>(_properties.actorPair.first, _properties.actorPair.second);
-            if (_properties.actorPair.first == -1 || _properties.actorPair.first == 0 || (vactor && vactor->formID == actor->formID)) {
-
-
-                auto vRWeapon = handle->LookupForm<RE::TESObjectWEAP>(_properties.weapPair.second.first, _properties.weapPair.first);
-                if (_properties.weapPair.second.first == -1 || _properties.weapPair.second.first == 0 || (vRWeapon && vRWeapon->formID == r_id)) {
-                
-                    auto vLWeapon = handle->LookupForm<RE::TESObjectWEAP>(_properties.weapPair.second.second, _properties.weapPair.first);
-                    if (_properties.weapPair.second.second == -1 || _properties.weapPair.second.second == -1 || (vLWeapon && vLWeapon->formID == l_id)) {
-
-
-                        if (_properties.weapType == -1 || _properties.weapType == 0 || 
-                            (RE::WEAPON_TYPE)_properties.weapType == r_type || (RE::WEAPON_TYPE)_properties.weapType == l_type) {
-
-                        
-                            auto veffect = handle->LookupForm<RE::EffectSetting>(_properties.effectPair.first, _properties.effectPair.second);
-                            if (_properties.effectPair.first == -1 || _properties.effectPair.first == 0 || (veffect && HasEffect(veffect->formID))) {
-
-                                auto vkeyword = handle->LookupForm<RE::BGSKeyword>(_properties.keywordPair.first, _properties.keywordPair.second);
-                                if (_properties.keywordPair.first == -1 || _properties.keywordPair.first == 0 || (vkeyword && actor->HasKeyword(vkeyword))) {
-
-                                    logger::info("Passed all conditional checks, subtracting costs and casting spells now...");
-
-                                    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kHealth, _properties.healthCost * -1.00f);
-                                    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, _properties.magickaCost * -1.00f);
-                                    actor->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kStamina, _properties.staminaCost * -1.00f);
-
-                                    for (auto spell : _properties.spells) {
-
-                                        for (auto it = spell.second.begin(); it < spell.second.end(); ++it) {
-
-                                            if (auto single = handle->LookupForm<RE::SpellItem>((RE::FormID)*it, spell.first.c_str())) {
-                                                logger::info("Casting Spell ' {} ' now", single->GetFullName());
-                                                actor->GetMagicCaster(RE::MagicSystem::CastingSource::kInstant)->CastSpellImmediate(
-                                                    single,                                     // spell
-                                                    false,                                      // noHitEffectArt
-                                                    _properties.targetCaster ? actor : nullptr, // target
-                                                    1.00f,                                      // effectiveness
-                                                    false,                                      // hostileEffectivenessOnly
-                                                    0.0f,                                       // magnitude override
-                                                    _properties.targetCaster ? nullptr : actor  // cause
-                                                );
-                                            }
-
-                                        }
-
-                                    }
-
-                                    logger::info("... Finished casting spells.");
-
-                                } else { logger::info("keyword check failed"); }
-
-                            } else { logger::info("effect check failed"); }
-                        
-                        } else { logger::info("weapon type check failed"); }
-                    
-                    } else { logger::info("Left weapon check failed"); }
-                
-                } else { logger::info("Right weapon check failed"); }
-            
-            } else { logger::info("actor check failed"); }
-
-        } else { logger::info("race check failed"); }
-    }
-    else { logger::info("Error: invalid data handler"); };
-
 }
