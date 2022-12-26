@@ -1,19 +1,10 @@
 #include "DynamicAnimationCasting.h"
+#include "Framework.h"
 
 void Loki::HUD::FlashHUDMeter(RE::ActorValue a_av) {
     static REL::Relocation<decltype(FlashHUDMeter)> FlashHUDMenuMeter{RELOCATION_ID(51907, 52845)};
     return FlashHUDMenuMeter(a_av);
 }
-
-inline bool IsInvalidFormID (RE::FormID id) noexcept
-{ 
-    return id == 0 || id == static_cast<decltype(id)>(-1); 
-};
-
-inline bool CheckFormID(RE::FormID required, auto getter) 
-{
-    return IsInvalidFormID(required) || required == getter();
-};
 
 RE::EnchantmentItem* GetEquipedObjectEnchantment(RE::Actor* actor, int hand) 
 {
@@ -75,7 +66,7 @@ bool DoesActorHasEffect(RE::Actor* actor, RE::FormID a_id)
     return false;
 };
 
-void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster) 
+void Loki::AnimationCasting::CastTrigger::Invoke(const RE::Actor* a_caster) 
 {
     RE::Actor * const actor = const_cast<RE::Actor*>(a_caster);
 
@@ -156,7 +147,10 @@ void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster)
         }
 
         auto CastOneSpell = [&](RE::MagicItem* spell) {
-            if (!spell) return false;
+            if (!spell) return true;
+
+            if (ignoreConcentrationSpell && spell->GetCastingType() == RE::MagicSystem::CastingType::kConcentration) return true;
+
             float spellCost = spell->CalculateMagickaCost(actor) * this->castMagickaCostFactor;
             if (actorMagicka < totalMagikaCost + spellCost) {
                 HUD::FlashHUDMeter(RE::ActorValue::kMagicka);
@@ -170,6 +164,13 @@ void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster)
             float magnitudeOverride = magnitude;
             if (auto* effect = spell->GetCostliestEffectItem()) {
                 magnitudeOverride = effect->GetMagnitude() * magnitude;
+
+                if (ignoreBoundWeapon &&
+                    effect->baseEffect &&
+                    effect->baseEffect->HasArchetype(RE::EffectArchetypes::ArchetypeID::kBoundWeapon))
+                {
+                    return true;
+                }
             }
 
             magicCaster->CastSpellImmediate(spell,                        // spell
@@ -182,6 +183,37 @@ void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster)
             );
             return true;
         };
+
+        auto CastOneSpellOrShout = [&](RE::TESForm* power, int shoutLevel = RE::TESShout::VariationIDs::kThree) {
+            if (power) {
+                auto spell = power->As<RE::MagicItem>();
+                if (!spell) {
+                    auto shout = power->As<RE::TESShout>();
+                    // how to check the words unlocked ???
+                    shoutLevel = std::clamp(shoutLevel, 0, 2);
+                    spell = shout->variations[shoutLevel].spell;
+                }
+                return CastOneSpell(spell);
+            }
+            return true;
+        };
+
+        auto GetPlayerFavouriteSpell = []() -> RE::MagicItem* {
+            const auto& favSpells = RE::MagicFavorites::GetSingleton()->spells;
+            for (int i = 0; i < favSpells.size(); i++) {
+                int favIndex = (DynamicAnimationCasting::MagicFavouriteIndex + i) % favSpells.size();
+                if (auto magic = favSpells[favIndex]->As<RE::MagicItem>()) {
+                    // DynamicAnimationCasting::MagicFavouriteIndex = favIndex + 1;
+                    return magic;
+                }
+            }
+            return nullptr;
+        };
+
+        static constexpr RE::FormID PlayerFormID = 20;
+        if (castFaviouriteMagic && actor->formID == PlayerFormID) {
+            CastOneSpellOrShout(GetPlayerFavouriteSpell(), RE::TESShout::VariationIDs::kThree);
+        }
 
         if ((int)source < 2) {
             if (castForeHandSpell) {
@@ -197,19 +229,19 @@ void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster)
         }
 
         if (castEquipedPower) {
-            if (auto power = actorRD.selectedPower) {
-                auto spell = power->As<RE::MagicItem>();
-                if (!spell) {
-                    auto shout = power->As<RE::TESShout>();
-                    // how to check the words unlocked ???
-                    spell = shout->variations[RE::TESShout::VariationIDs::kThree].spell;
-                }
-                CastOneSpell(spell);
-            }
+            CastOneSpellOrShout(actorRD.selectedPower, actor->GetCurrentShoutLevel());
         }
 
-        for (auto spell : Spells()) {
-            if (!CastOneSpell(spell)) break;
+        for (auto spell : spells) {
+            if (!CastOneSpellOrShout(spell)) break;
+        }
+
+        for (const auto& customSpellName : customSpells) {
+            if (auto itr = DynamicAnimationCasting::CustomSpells.find(customSpellName); itr != DynamicAnimationCasting::CustomSpells.end()) {
+                if (auto spell = itr->second ) {
+                    if (!CastOneSpellOrShout(spell)) break;
+                }
+            }            
         }
 
         actorAV->RestoreActorValue(RE::ACTOR_VALUE_MODIFIER::kDamage, RE::ActorValue::kMagicka, totalMagikaCost * -1.00f);
@@ -260,11 +292,22 @@ void Loki::AnimationCasting::CastTrigger::CastSpells(const RE::Actor* a_caster)
                             magnitudeModifier += effect->GetMagnitude() * weapons[hand].enchantMagnitudeFactor;
                         }
                     }
+
+                    if (cooldown > 0 && !DynamicAnimationCasting::UpdateTriggerCooldown(cooldown, this, actor)) {
+                        return; // not continue
+                    }
                     CastSpells(castingSource, magnitudeModifier, dualCasting);
                 }
             }
         }
     } else {
+        if (cooldown > 0 && !DynamicAnimationCasting::UpdateTriggerCooldown(cooldown, this, actor)) {
+            return;
+        }
         CastSpells(RE::MagicSystem::CastingSource::kInstant, baseMagnitude, dualCasting);
     }
+}
+
+std::string Loki::AnimationCasting::CastTrigger::ToString() const {
+    return {};
 }

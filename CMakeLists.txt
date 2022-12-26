@@ -24,10 +24,10 @@ set(headers)
 
 set(sources
         src/main.cpp
-        src/Project/Framework.cpp
-        src/Project/Framework.h
-        src/Project/Casting/DynamicAnimationCasting.cpp
-        src/Project/Casting/DynamicAnimationCasting.h
+        src/Framework.cpp
+        src/Framework.h
+        src/DynamicAnimationCasting.cpp
+        src/DynamicAnimationCasting.h
         ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
 
 set(tests

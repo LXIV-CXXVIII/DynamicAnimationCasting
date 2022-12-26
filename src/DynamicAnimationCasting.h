@@ -12,6 +12,12 @@ namespace Loki {
         static constexpr int8_t kShield = std::to_underlying(RE::WEAPON_TYPE::kCrossbow) + 2;
         static constexpr int8_t kTorch = std::to_underlying(RE::WEAPON_TYPE::kCrossbow) + 3;
 
+        inline bool IsInvalidFormID(RE::FormID id) noexcept { return id == 0 || id == static_cast<decltype(id)>(-1); };
+
+        inline bool CheckFormID(RE::FormID required, auto getter) {
+            return IsInvalidFormID(required) || required == getter();
+        };
+
         struct WeaponTrigger {
             RE::FormID formid = 0;
             std::int8_t type = -1;
@@ -23,12 +29,13 @@ namespace Loki {
             bool cast = true;
 
             bool Constrainted() const noexcept {
-                return formid >0 || type >=0 || keyword || enchant > 0; 
+                return !IsInvalidFormID(formid) || type >= 0 || keyword || !IsInvalidFormID(enchant); 
             }
         };
 
 		struct CastTrigger {
-            RE::BSFixedString tag;  // event tag for triggering this spell
+            // event tag for triggering this spell
+            RE::BSFixedString tag;
 
             // Conditions
             RE::FormID caster = 0;
@@ -39,33 +46,39 @@ namespace Loki {
             std::optional<bool> isOnMount;
             std::optional<bool> isRunning;
             std::optional<bool> isSneaking;
-            WeaponTrigger weapons[2];  // right, left
+            WeaponTrigger weapons[2]; // right, left
             float chance = 1.0f;
 
             // Properties
-            bool targetCaster = false;
-            bool useWeaponCast = false;
-            bool castOffHandSpell = false;
+            float   cooldown = 0.f;
+            bool    targetCaster = false;
+            bool    useWeaponCast = false;
+            bool    dualCasting = false;
+            float   healthCost = 0.f;
+            float   staminaCost = 0.f;
+            float   magickaCost = 0.f;
+            float   effectiveness = 1.f;
+            float   baseMagnitude = 1.f;
+            float   castMagickaCostFactor = 1.f;
+
+            // Spell Filters
+            bool ignoreConcentrationSpell = false;
+            bool ignoreBoundWeapon = false;
+
+            // Spells
             bool castForeHandSpell = false;
+            bool castOffHandSpell = false;
             bool castEquipedPower = false;
             bool castFaviouriteMagic = false;
-            bool dualCasting = false;
-            float healthCost = 0.f;
-            float staminaCost = 0.f;
-            float magickaCost = 0.f;
-            float effectiveness = 1.f;
-            float baseMagnitude = 1.f;
-            float castMagickaCostFactor = 1.f;
-
-            std::string spells_buffer;  // small_vector<RE::SpellItem*>, using std::string as the underlying data
+            //!!! BSTSmallArray is neither copiable or movable
+            RE::BSTSmallArray<RE::MagicItem*,1> spells;
+            RE::BSTSmallArray<RE::BSFixedString, 1> customSpells;
 
             bool HasWeaponConstraints() const { return weapons[0].Constrainted() || weapons[1].Constrainted(); }
 
-            auto Spells() {
-                return std::span {reinterpret_cast<RE::MagicItem**>(spells_buffer.data()), spells_buffer.size() / sizeof(RE::MagicItem*)};
-            }
+			void Invoke(const RE::Actor* a_caster);
 
-			void CastSpells(const RE::Actor* a_caster);
+            std::string ToString() const;
 		};
 
 	};

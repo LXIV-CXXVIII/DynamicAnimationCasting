@@ -1,5 +1,5 @@
-﻿#include "Project/Casting/DynamicAnimationCasting.h"
-#include "Project/framework.h"
+﻿#include "DynamicAnimationCasting.h"
+#include "Framework.h"
 #include <stddef.h>
 
 using namespace RE::BSScript;
@@ -29,13 +29,14 @@ namespace {
 
         std::shared_ptr<spdlog::logger> log;
         if (IsDebuggerPresent()) {
-            log = std::make_shared<spdlog::logger>("Global", std::make_shared<spdlog::sinks::msvc_sink_mt>());
+            log = std::make_shared<spdlog::logger>(
+                "Global", std::make_shared<spdlog::sinks::msvc_sink_mt>());
         } else {
             log = std::make_shared<spdlog::logger>(
                 "Global", std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true));
         }
-        log->set_level(spdlog::level::warn);
-        log->flush_on(spdlog::level::warn);
+        log->set_level(spdlog::level::info);
+        log->flush_on(spdlog::level::info);
 
         spdlog::set_default_logger(std::move(log));
         spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [%n] [%l] [%t] [%s:%#] %v");
@@ -57,15 +58,26 @@ namespace {
      * for the entire plugin.
      * </p>
      */
-    //void InitializeSerialization() {
-    //    log::trace("Initializing cosave serialization...");
-    //    auto* serde = GetSerializationInterface();
-    //    serde->SetUniqueID(_byteswap_ulong('SMPL'));
-    //    serde->SetSaveCallback(Sample::HitCounterManager::OnGameSaved);
-    //    serde->SetRevertCallback(Sample::HitCounterManager::OnRevert);
-    //    serde->SetLoadCallback(Sample::HitCounterManager::OnGameLoaded);
-    //    log::trace("Cosave serialization initialized.");
-    //}
+    void InitializeSerialization() {
+        log::trace("Initializing cosave serialization...");
+        auto* serde = GetSerializationInterface();
+        serde->SetUniqueID(_byteswap_ulong('SMPL'));
+        serde->SetSaveCallback(Loki::DynamicAnimationCasting::OnGameSaved);
+        serde->SetRevertCallback(Loki::DynamicAnimationCasting::OnRevert);
+        serde->SetLoadCallback(Loki::DynamicAnimationCasting::OnGameLoaded);
+        log::trace("Cosave serialization initialized.");
+    }
+
+	bool RegisterCustomSpell(RE::StaticFunctionTag*, RE::BSFixedString a_name, RE::SpellItem* a_spell)
+    {
+        return Loki::DynamicAnimationCasting::RegisterCustomSpell(a_name, a_spell);
+    }
+
+    bool SelectFavouriteSpell(RE::StaticFunctionTag*, int a_index)
+    {
+        Loki::DynamicAnimationCasting::MagicFavouriteIndex = a_index;
+        return true;
+    }
 
     /**
      * Initialize our Papyrus extensions.
@@ -81,13 +93,13 @@ namespace {
      * additional functions.
      * </p>
      */
-    void InitializePapyrus() {
+    bool InitializePapyrus(RE::BSScript::IVirtualMachine* a_vm) {
+        static constexpr const char PapyrusClass[] = "DynamicAnimationCasting";
         log::trace("Initializing Papyrus binding...");
-        //if (GetPapyrusInterface()->Register(Sample::RegisterHitCounter)) {
-        //    log::debug("Papyrus functions bound.");
-        //} else {
-        //    stl::report_and_fail("Failure to register Papyrus bindings.");
-        //}
+        a_vm->RegisterFunction("RegisterCustomSpell", PapyrusClass, RegisterCustomSpell);
+        a_vm->RegisterFunction("SelectFavouriteSpell", PapyrusClass, SelectFavouriteSpell);
+        log::debug("Papyrus functions bound.");
+        return true;
     }
 
     /**
@@ -189,8 +201,10 @@ SKSEPluginLoad(const LoadInterface* skse) {
 
     Init(skse);
     InitializeMessaging();
-    // InitializeSerialization();
-    InitializePapyrus();
+    InitializeSerialization();
+    if (!GetPapyrusInterface()->Register(InitializePapyrus)) {
+        stl::report_and_fail("Unable to register papyrus function.");
+    }
 
     log::info("{} has finished loading.", plugin->GetName());
     return true;

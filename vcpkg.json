@@ -1,9 +1,9 @@
 {
 		"$schema": "https://raw.githubusercontent.com/microsoft/vcpkg/master/scripts/vcpkg.schema.json",
-		"name": "dynamic-animation-cast-ng",
+		"name": "dodge-framework-ng",
 		"version-string": "1.0.0",
 		"port-version": 0,
-		"description": "A SKSE plugin to cast spells on animation events.",
+		"description": "A SKSE plugin to trigger dodge animation.",
 		"homepage": "https://www.skyrimng.com",
 		"license": "Apache-2.0",
 		"features": {
