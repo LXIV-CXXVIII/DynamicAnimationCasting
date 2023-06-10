@@ -1,6 +1,8 @@
+#include "PCH.h"
 #include "framework.h"
 #define TOML_EXCEPTIONS 0
 #include <toml++/toml.h>
+#include "Expression.h"
 
 void Loki::DynamicAnimationCasting::ReadToml(std::filesystem::path path) {
     logger::info("Reading {}...", path.string());
@@ -126,9 +128,19 @@ void Loki::DynamicAnimationCasting::ReadToml(std::filesystem::path path) {
             trigger.tag = event["AnimationEvent"].value_or(empty_string);
             logger::info("- Cast Trigger [{}]", trigger.tag);
 
+            auto exGroupName = event["ExclusiveGroup"].value_or(empty_string);
+            if (!exGroupName.empty()) {
+                trigger.group = ExclusiveGroups.try_emplace(std::move(exGroupName), static_cast<int>(exGroupName.size())).first->second;
+                if (trigger.group > MaxExclusiveGroups) {
+                    logger::error("Number of exclusive groups overflow (>{}), ignore group {}...", MaxExclusiveGroups, exGroupName);
+                    trigger.group = -1;
+                }
+            }
+
             trigger.race = ParseFormID(event, "HasRaceFormID", "RaceEspName");
             trigger.effect = ParseFormID(event, "HasEffectFormID", "EffectEspName");
             trigger.caster = ParseFormID(event, "HasActorFormID", "ActorEspName");
+            trigger.perk = RE::TESForm::LookupByID<RE::BGSPerk>(ParseFormID(event, "HasPerkFormID", "PerkEspName"));
             trigger.keyword = RE::TESForm::LookupByID<RE::BGSKeyword>(ParseFormID(event, "HasKeywordFormID", "KeywordEspName"));
             trigger.isOnMount = ParseOptionalBool(event["IsOnMount"]);
             trigger.isSneaking = ParseOptionalBool(event["IsSneaking"]);
@@ -147,6 +159,10 @@ void Loki::DynamicAnimationCasting::ReadToml(std::filesystem::path path) {
             trigger.weapons[0].enchantMagnitudeFactor = event["WeaponEnchantMagnitudeFactor"].value_or(1.f);
             trigger.weapons[1].enchantMagnitudeFactor = trigger.weapons[0].enchantMagnitudeFactor;
             trigger.cooldown = event["Cooldown"].value_or(0.f);
+            trigger.chance = event["Chance"].value_or(1.f);
+            trigger.castOnlyOneSpell = event["CastOnlyFirstSpell"].value_or(false);
+            trigger.castOnlyKnownSpell = event["CastOnlyKnownSpell"].value_or(false);
+            trigger.replaceCastingSpell = event["ReplaceCastingSpell"].value_or(false);
             trigger.ignoreConcentrationSpell = event["IgnoreConcentrationSpell"].value_or(false);
             trigger.ignoreBoundWeapon = event["IgnoreBoundWeaponSpell"].value_or(false);
             trigger.targetCaster = event["TargetCaster"].value_or(false);
@@ -155,6 +171,7 @@ void Loki::DynamicAnimationCasting::ReadToml(std::filesystem::path path) {
             trigger.castForeHandSpell = event["CastForeHandSpell"].value_or(false);
             trigger.castEquipedPower = event["CastEquipedPower"].value_or(false);
             trigger.castFaviouriteMagic = event["CastFaviouriteMagic"].value_or(false);
+            trigger.effectiveness = event["Effectiveness"].value_or(1.f);
             trigger.healthCost = event["HealthCost"].value_or(0.f);
             trigger.magickaCost = event["MagickaCost"].value_or(0.f);
             trigger.staminaCost = event["StaminaCost"].value_or(0.f);
@@ -238,6 +255,8 @@ void Loki::DynamicAnimationCasting::LoadTomls() {
     TomlLoaded = true;
 
     logger::info("Reading all .tomls in file...");
+    ExclusiveGroups.clear();
+    CastTriggers.clear();
 
     if (std::filesystem::is_directory(path)) {
         for (const auto& file : std::filesystem::directory_iterator(path)) {
@@ -260,16 +279,51 @@ void Loki::DynamicAnimationCasting::InstallGraphEventSink() {
     _NPCProcessEvent = NPCProcessAnimGraphEventVtbl.write_vfunc(0x1, &NPCProcessEvent);
 }
 
+void Loki::DynamicAnimationCasting::ReplaceMagicCasterSpell(RE::MagicCaster* caster, RE::MagicItem* replacing,
+                                                            RE::MagicItem* replacement) {
+    MagicCastHook::ReplacingSpell = replacing;
+    MagicCastHook::ReplacementSpell = replacement;
+}
+
+static thread_local int InProcessEvent = 0;
+
+struct ProcessEventRecursionGaurd {
+    ProcessEventRecursionGaurd() { 
+        InProcessEvent++;
+    }
+    ~ProcessEventRecursionGaurd() {
+        InProcessEvent--;
+    }
+};
+
 RE::BSEventNotifyControl Loki::DynamicAnimationCasting::ProcessEvent(RE::BSTEventSink<RE::BSAnimationGraphEvent>* a_this, RE::BSAnimationGraphEvent& a_event, RE::BSTEventSource<RE::BSAnimationGraphEvent>* a_src) {
+    
+    // MRh_SpellFire_Event may be fired by CastSpellImmediate
+    // Prevent infinite recursion in this case
+    if (InProcessEvent > 0) {
+        return RE::BSEventNotifyControl::kContinue;
+    }
 
-    if (a_event.tag != NULL && a_event.holder != NULL) {
-        auto actor = a_event.holder->As<RE::Actor>();
+    ProcessEventRecursionGaurd Guard;
 
+    constexpr auto IsValidGroup = [](int group) -> bool { return group >= 0 && group < MaxExclusiveGroups; };
+
+    const RE::Actor* actor = nullptr;
+    if (!a_event.tag.empty() && a_event.holder && (actor = a_event.holder->As<RE::Actor>())) {
+        #ifdef _DEBUG
+        logger::info("{} {}", a_event.tag.c_str(), a_event.payload.c_str());
+        #endif
+        GroupCounterType groups;
         for (auto& trigger : DynamicAnimationCasting::CastTriggers) {
             // BSFixedString::operator== is just a pointer compare, super efficient
             if (a_event.tag == trigger.tag) {
                 // logger::info("Event Found: {}", a_event.tag);
-                trigger.Invoke(actor);
+                if (!IsValidGroup(trigger.group) || !groups.test(trigger.group)) {
+                    bool triggered = trigger.Invoke(actor);
+                    if (triggered && IsValidGroup(trigger.group)) {
+                        groups.set(trigger.group);
+                    }
+                }
             }
         }
     }
@@ -302,7 +356,7 @@ bool Loki::DynamicAnimationCasting::UpdateTriggerCooldown(float cooldown,
                                                           const AnimationCasting::CastTrigger* trigger,
                                                           const RE::Actor* actor) 
 {
-    assert(cooldown > 0);
+    if (!actor) return false;
     std::uint64_t triggerKey = (trigger - CastTriggers.data()) & 0xffffffff;
     std::uint64_t actorKey = actor->formID & 0xffffffff;
     std::uint64_t key = triggerKey << 32 | actorKey;
@@ -322,6 +376,34 @@ bool Loki::DynamicAnimationCasting::RegisterCustomSpell(RE::BSFixedString a_name
         return true;
     }
     return false;
+}
+
+int Loki::DynamicAnimationCasting::SetMagicFavourite(int Index) {
+    const auto& favSpells = RE::MagicFavorites::GetSingleton()->spells;
+    if (Index < 0 || Index >= favSpells.size()) {
+        MagicFavouriteIndex = -1;
+        RE::DebugNotification("Selected Spell : None");
+    } else {
+        MagicFavouriteIndex = Index;
+        auto message = fmt::format("Selected Spell : {}", favSpells[Index]->GetName());
+        RE::DebugNotification(message.c_str());
+    }
+    return MagicFavouriteIndex;
+}
+
+int Loki::DynamicAnimationCasting::NextMagicFavourite(int Delta) {
+    logger::info("NextMagicFavourite");
+    const auto& favSpells = RE::MagicFavorites::GetSingleton()->spells;
+    const int nFavSpells = static_cast<int>(favSpells.size()) + 1;
+    for (int i = Delta; std::abs(i) < nFavSpells; i += (Delta < 0 ? -1 : +1)) {
+        int favIndex = (DynamicAnimationCasting::MagicFavouriteIndex + i + nFavSpells) % nFavSpells;
+        if (favIndex == nFavSpells - 1 || favSpells[favIndex]->As<RE::MagicItem>()) 
+        {
+            SetMagicFavourite(favIndex);
+            break;
+        }
+    }
+    return MagicFavouriteIndex;
 }
 
 // These four-character record types, which store data in the SKSE cosave, are little-endian. That means they are

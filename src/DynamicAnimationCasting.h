@@ -18,6 +18,15 @@ namespace Loki {
             return IsInvalidFormID(required) || required == getter();
         };
 
+        static inline auto GetSpellArchetype(RE::MagicItem* spell) -> RE::EffectSetting::Archetype {
+            if (auto effect = spell->GetCostliestEffectItem()) {
+                if (auto baseEffect = effect->baseEffect) {
+                    return baseEffect->GetArchetype();
+                }
+            }
+            return RE::EffectSetting::Archetype::kNone;
+        };
+
         struct WeaponTrigger {
             RE::FormID formid = 0;
             std::int8_t type = -1;
@@ -48,6 +57,7 @@ namespace Loki {
             std::optional<bool> isSneaking;
             WeaponTrigger weapons[2]; // right, left
             float chance = 1.0f;
+            int group = -1;
 
             // Properties
             float   cooldown = 0.f;
@@ -62,8 +72,11 @@ namespace Loki {
             float   castMagickaCostFactor = 1.f;
 
             // Spell Filters
+            bool castOnlyOneSpell = false;
+            bool castOnlyKnownSpell = false;
             bool ignoreConcentrationSpell = false;
             bool ignoreBoundWeapon = false;
+            bool replaceCastingSpell = false;
 
             // Spells
             bool castForeHandSpell = false;
@@ -75,8 +88,14 @@ namespace Loki {
             RE::BSTSmallArray<RE::BSFixedString, 1> customSpells;
 
             bool HasWeaponConstraints() const { return weapons[0].Constrainted() || weapons[1].Constrainted(); }
+            bool IsAllowedSpell(const RE::Actor* actor, RE::MagicItem* spell) const {
+                return  spell &&
+                        (!castOnlyKnownSpell || actor->HasSpell(spell->As<RE::SpellItem>())) &&
+                        (!ignoreConcentrationSpell || spell->GetCastingType() != RE::MagicSystem::CastingType::kConcentration) &&
+                        (!ignoreBoundWeapon || GetSpellArchetype(spell) != RE::EffectSetting::Archetype::kBoundWeapon);
+            }
 
-			void Invoke(const RE::Actor* a_caster);
+			bool Invoke(const RE::Actor* a_caster);
 
             std::string ToString() const;
 		};

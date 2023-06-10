@@ -1,4 +1,5 @@
-﻿#include "DynamicAnimationCasting.h"
+﻿#include "PCH.h"
+#include "DynamicAnimationCasting.h"
 #include "Framework.h"
 #include <stddef.h>
 
@@ -29,8 +30,7 @@ namespace {
 
         std::shared_ptr<spdlog::logger> log;
         if (IsDebuggerPresent()) {
-            log = std::make_shared<spdlog::logger>(
-                "Global", std::make_shared<spdlog::sinks::msvc_sink_mt>());
+            log = std::make_shared<spdlog::logger>("Global", std::make_shared<spdlog::sinks::msvc_sink_mt>());
         } else {
             log = std::make_shared<spdlog::logger>(
                 "Global", std::make_shared<spdlog::sinks::basic_file_sink_mt>(path->string(), true));
@@ -68,15 +68,16 @@ namespace {
         log::trace("Cosave serialization initialized.");
     }
 
-	bool RegisterCustomSpell(RE::StaticFunctionTag*, RE::BSFixedString a_name, RE::SpellItem* a_spell)
-    {
+    bool RegisterCustomSpell(RE::StaticFunctionTag*, RE::BSFixedString a_name, RE::SpellItem* a_spell) {
         return Loki::DynamicAnimationCasting::RegisterCustomSpell(a_name, a_spell);
     }
 
-    bool SelectFavouriteSpell(RE::StaticFunctionTag*, int a_index)
-    {
-        Loki::DynamicAnimationCasting::MagicFavouriteIndex = a_index;
-        return true;
+    bool SelectFavouriteSpell(RE::StaticFunctionTag*, int a_index) {
+        return Loki::DynamicAnimationCasting::SetMagicFavourite(a_index) >= 0;
+    }
+
+    int NextFavouriteSpell(RE::StaticFunctionTag*, int a_delta) {
+        return Loki::DynamicAnimationCasting::NextMagicFavourite(a_delta);
     }
 
     /**
@@ -98,6 +99,7 @@ namespace {
         log::trace("Initializing Papyrus binding...");
         a_vm->RegisterFunction("RegisterCustomSpell", PapyrusClass, RegisterCustomSpell);
         a_vm->RegisterFunction("SelectFavouriteSpell", PapyrusClass, SelectFavouriteSpell);
+        a_vm->RegisterFunction("NextFavouriteSpell", PapyrusClass, NextFavouriteSpell);
         log::debug("Papyrus functions bound.");
         return true;
     }
@@ -124,7 +126,9 @@ namespace {
         //trampoline.create(64);
         //log::trace("Trampoline initialized.");
 
+        // Loki::AnimationCasting::InputEventHandler::Register();
         Loki::DynamicAnimationCasting::InstallGraphEventSink();
+        // Loki::DynamicAnimationCasting::MagicCastHook::Install();
     }
 
     /**

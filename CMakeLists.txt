@@ -6,7 +6,7 @@ message("Using toolchain file ${CMAKE_TOOLCHAIN_FILE}.")
 ########################################################################################################################
 project(
         DynamicAnimationCasting
-        VERSION 1.0.0
+        VERSION 3.2.3
         DESCRIPTION "A SKSE plugin to trigger spell on animation notify."
         LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 23)
@@ -55,6 +55,7 @@ find_package(span-lite CONFIG REQUIRED)
 # find_package(xbyak CONFIG REQUIRED)
 find_package(tomlplusplus CONFIG REQUIRED)
 
+set(ADD_COMMONLIBSSE_PLUGIN_AUTHOR "ArcEarth" CACHE STRING "Author of the plugin")
 add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources})
 add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
