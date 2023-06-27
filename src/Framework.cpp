@@ -258,6 +258,9 @@ void Loki::DynamicAnimationCasting::LoadTomls() {
     ExclusiveGroups.clear();
     CastTriggers.clear();
 
+    CustomSpells.clear();
+    CustomSpells.emplace("TEST"sv, nullptr);
+
     if (std::filesystem::is_directory(path)) {
         for (const auto& file : std::filesystem::directory_iterator(path)) {
             if (std::filesystem::is_regular_file(file) && file.path().extension() == ext) {
@@ -265,6 +268,10 @@ void Loki::DynamicAnimationCasting::LoadTomls() {
             }
         }
     }
+
+    // Hard coded test spell TEST of fireball
+    auto Fireball = RE::TESDataHandler::GetSingleton()->LookupForm<RE::SpellItem>(0x7D997, "Skyrim.esm"sv);
+    RegisterCustomSpell("TEST"sv, Fireball);
 
     logger::info("Successfully read all .tomls in file.");
 }
@@ -345,11 +352,10 @@ RE::BSEventNotifyControl Loki::DynamicAnimationCasting::NPCProcessEvent(
 }
 
 void Loki::DynamicAnimationCasting::ResetCustomSpells() {
-    CustomSpells.clear();
-    // Register fireball as the TEST spell
-    CustomSpells.emplace("TEST"sv, nullptr);
-    auto Fireball = RE::TESDataHandler::GetSingleton()->LookupForm<RE::SpellItem>(0x7D997, "Skyrim.esm"sv);
-    RegisterCustomSpell("TEST"sv, Fireball);
+    for (auto& [Key, Spell] : CustomSpells) 
+    {
+        Spell = nullptr;
+    }
 }
 
 bool Loki::DynamicAnimationCasting::UpdateTriggerCooldown(float cooldown,
@@ -492,6 +498,7 @@ void Loki::DynamicAnimationCasting::OnGameLoaded(SKSE::SerializationInterface* s
                 RE::FormID spellFormID = ReadFormID(serde);
                 auto* spell = RE::TESForm::LookupByID<RE::MagicItem>(spellFormID);
 
+                logger::info("Loaded Custom Spell {} -> {}", name, spell ? spell->GetName() : "NULL");
                 RegisterCustomSpell(name, spell);
             }
         } else {

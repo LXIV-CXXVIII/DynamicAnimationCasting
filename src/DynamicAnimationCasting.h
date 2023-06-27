@@ -55,7 +55,8 @@ namespace Loki {
             std::optional<bool> isOnMount;
             std::optional<bool> isRunning;
             std::optional<bool> isSneaking;
-            WeaponTrigger weapons[2]; // right, left
+            std::optional<bool> isSprinting;
+            WeaponTrigger weapons[2];  // right, left
             float chance = 1.0f;
             int group = -1;
 

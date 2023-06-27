@@ -132,6 +132,10 @@ bool Loki::AnimationCasting::CastTrigger::Invoke(const RE::Actor* a_caster)
         return false;
     }
 
+    if (isSprinting.has_value() && isSprinting.value() != actor->AsActorState()->IsSprinting()) {
+        return false;
+    }
+
     RE::ActorValueOwner* actorAV = actor->AsActorValueOwner();
     if (!actorAV) {
         return false;
