@@ -1,193 +1,155 @@
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required(VERSION 3.21)
+message("Using toolchain file ${CMAKE_TOOLCHAIN_FILE}.")
 
-set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
-set(VCPKG_TARGET_TRIPLET "x64-windows-static" CACHE STRING "")
-
-# ---- Project ----
-
+########################################################################################################################
+## Define project
+########################################################################################################################
 project(
-	loki_DynamicAnimationCasting
-	VERSION 1.0.0
-	LANGUAGES CXX
-)
+        DynamicAnimationCasting
+        VERSION 3.2.3
+        DESCRIPTION "A SKSE plugin to trigger spell on animation notify."
+        LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
+
+include(GNUInstallDirs)
 
 configure_file(
-	${CMAKE_CURRENT_SOURCE_DIR}/version.rc.in
-	${CMAKE_CURRENT_BINARY_DIR}/version.rc
-	@ONLY
-)
+        ${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.rc.in
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc
+        @ONLY)
 
-# ---- Include guards ----
-
-if(PROJECT_SOURCE_DIR STREQUAL PROJECT_BINARY_DIR)
-	message(
-		FATAL_ERROR
-			"In-source builds not allowed. Please make a new directory (called a build directory) and run CMake from there."
-)
-endif()
-
-# ---- Dependencies ----
-
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_DEBUG OFF)
-
-set(Boost_USE_MULTITHREADED ON)
-set(Boost_USE_STATIC_LIBS ON)
-set(Boost_USE_STATIC_RUNTIME ON)
-set(Boost_USE_DEBUG_RUNTIME ON)
-
-if (MSVC)
-	add_compile_definitions(
-		_UNICODE
-	)
-	
-	set(COMPILE_OPTIONS_DEBUG
-		/Zc:inline-	# Keep unreferenced COMDAT
-		/JMC	# Just My Code debugging
-	)
-	
-	set(COMPILE_OPTIONS_RELEASE
-		/Zc:inline	# Remove unreferenced COMDAT
-		/JMC-	# Disable Just My Code debugging
-	)
-
-	add_compile_options(
-		/Gy	# Enable Function-Level Linking
-		/MP	# Build with Multiple Processes
-		/Oi	# Generate Intrinsic Functions
-		/sdl	# Enable Additional Security Checks
-		/Zi	# Debug Information Format
-		
-		/permissive-	# Standards conformance
-		
-		/Zc:alignedNew	# C++17 over-aligned allocation
-		/Zc:auto	# Deduce Variable Type
-		/Zc:char8_t
-		/Zc:__cplusplus	# Enable updated __cplusplus macro
-		/Zc:externC
-		/Zc:externConstexpr	# Enable extern constexpr variables
-		/Zc:forScope	# Force Conformance in for Loop Scope
-		/Zc:hiddenFriend
-		/Zc:implicitNoexcept	# Implicit Exception Specifiers
-		/Zc:lambda
-		/Zc:noexceptTypes	# C++17 noexcept rules
-		/Zc:preprocessor	# Enable preprocessor conformance mode
-		/Zc:referenceBinding	# Enforce reference binding rules
-		/Zc:rvalueCast	# Enforce type conversion rules
-		/Zc:sizedDealloc	# Enable Global Sized Deallocation Functions
-		/Zc:strictStrings	# Disable string literal type conversion
-		/Zc:ternary	# Enforce conditional operator rules
-		/Zc:threadSafeInit	# Thread-safe Local Static Initialization
-		/Zc:tlsGuards
-		/Zc:trigraphs	# Trigraphs Substitution
-		/Zc:wchar_t	# wchar_t Is Native Type
-		
-		/experimental:external
-		/external:anglebrackets
-		/external:W0
-		
-		/W4	# Warning level (all warnings)
-		/WX	# Warning level (warnings are errors)
-		
-		"$<$<CONFIG:Debug>:${COMPILE_OPTIONS_DEBUG}>"
-		"$<$<CONFIG:Release>:${COMPILE_OPTIONS_RELEASE}>"
-	)
-
-	set(LINK_OPTIONS_DEBUG
-		/INCREMENTAL	# Link Incrementally
-		/OPT:NOREF	# Optimizations (keep functions/data never referenced)
-		/OPT:NOICF	# Optimizations (prevent identical COMDAT folding)
-	)
-	
-	set(LINK_OPTIONS_RELEASE
-		/INCREMENTAL:NO	# Link Incrementally
-		/OPT:REF	# Optimizations (eliminate functions/data never referenced)
-		/OPT:ICF	# Optimizations (perform identical COMDAT folding)
-	)
-
-	add_link_options(
-		"$<$<CONFIG:Debug>:${LINK_OPTIONS_DEBUG}>"
-		"$<$<CONFIG:Release>:${LINK_OPTIONS_RELEASE}>"
-	)
-endif()
-
-add_subdirectory(extern/CommonLibSSE CommonLibSSE)
-
-find_package(spdlog REQUIRED)
-
-find_path(XBYAK_INCLUDE_DIRS "xbyak/xbyak.h")
-
-find_package(tomlplusplus REQUIRED CONFIG)
-
-# ---- Add source files ----
-
-set(headers
-	src/PCH.h
-)
+set(headers)
 
 set(sources
-	src/main.cpp
-	src/Project/Framework.cpp
-	src/Project/Framework.h
-	src/Project/Casting/DynamicAnimationCasting.cpp
-	src/Project/Casting/DynamicAnimationCasting.h
-	src/PCH.cpp
-)
+        src/main.cpp
+        src/Framework.cpp
+        src/Framework.h
+        src/DynamicAnimationCasting.cpp
+        src/DynamicAnimationCasting.h
+        ${CMAKE_CURRENT_BINARY_DIR}/version.rc)
+
+set(tests
+        test/FrameworkTest.cpp)
 
 source_group(
-	TREE ${CMAKE_CURRENT_SOURCE_DIR}
-	FILES
-		${headers}
-		${sources}
-)
+        TREE ${CMAKE_CURRENT_SOURCE_DIR}
+        FILES
+        ${headers}
+        ${sources}
+        ${tests})
 
-# ---- Create DLL ----
+#########################################################################################################################
+### Build options
+#########################################################################################################################
+message("Options:")
+option(BUILD_TESTS "Build unit tests." OFF)
+message("\tTests: ${BUILD_TESTS}")
 
-add_library(${PROJECT_NAME} SHARED
-	${headers}
-	${sources}
-	${CMAKE_CURRENT_BINARY_DIR}/version.rc
-	.clang-format
-)
+########################################################################################################################
+## Configure target DLL
+########################################################################################################################
+find_package(CommonLibSSE CONFIG REQUIRED)
+find_package(span-lite CONFIG REQUIRED)
+# find_package(xbyak CONFIG REQUIRED)
+find_package(tomlplusplus CONFIG REQUIRED)
 
-set_property(
-	TARGET
-		${PROJECT_NAME}
-		CommonLibSSE
-	PROPERTY
-		MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>"
-)
+set(ADD_COMMONLIBSSE_PLUGIN_AUTHOR "ArcEarth" CACHE STRING "Author of the plugin")
+add_commonlibsse_plugin(${PROJECT_NAME} SOURCES ${headers} ${sources})
+add_library("${PROJECT_NAME}::${PROJECT_NAME}" ALIAS "${PROJECT_NAME}")
 
-target_compile_features(${PROJECT_NAME}
-	PUBLIC
-		cxx_std_17
-)
-
-target_compile_options(${PROJECT_NAME}
-	PRIVATE
-		"$<$<BOOL:${MSVC}>:/TP>"
+target_include_directories(${PROJECT_NAME}
+        PRIVATE
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/src>
+        $<INSTALL_INTERFACE:src>
 )
 
 target_include_directories(${PROJECT_NAME}
-	PRIVATE 
-		$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>
-        $<INSTALL_INTERFACE:src>
-        ${XBYAK_INCLUDE_DIRS}
-)
+        PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>)
 
 target_link_libraries(${PROJECT_NAME}
-	PUBLIC
-		CommonLibSSE::CommonLibSSE
-		spdlog::spdlog
-		tomlplusplus::tomlplusplus
-)
-
-target_link_options(${PROJECT_NAME}
-	PUBLIC
-		${LINK_OPTIONS_${CONFIG}}
+        PRIVATE
+        tomlplusplus::tomlplusplus
+        #xbyak::xbyak
+        nonstd::span-lite
 )
 
 target_precompile_headers(${PROJECT_NAME}
-	PRIVATE
-		src/PCH.h
-)
+        PRIVATE
+        src/PCH.h)
+
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/Sample"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+install(TARGETS ${PROJECT_NAME}
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}")
+
+########################################################################################################################
+## Configure unit tests
+########################################################################################################################
+if(BUILD_TESTS)
+    find_package(Catch2 CONFIG REQUIRED)
+
+    include(CTest)
+    include(Catch)
+
+    add_executable(
+            ${PROJECT_NAME}Tests
+            ${headers}
+            ${tests})
+
+    target_link_libraries(
+            ${PROJECT_NAME}Tests
+            PRIVATE
+            ${PROJECT_NAME}
+            Catch2::Catch2WithMain)
+
+    target_precompile_headers(${PROJECT_NAME}Tests
+            PRIVATE
+            src/PCH.h)
+
+    catch_discover_tests(${PROJECT_NAME}Tests)
+    add_test(NAME ${PROJECT_NAME}Tests COMMAND ${PROJECT_NAME}Tests)
+endif()
+
+########################################################################################################################
+## Automatic plugin deployment
+########################################################################################################################
+# Automatic deployment to FOMOD directory.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set(BUILD_NAME "Debug")
+else()
+    set(BUILD_NAME "Release")
+endif()
+install(DIRECTORY DESTINATION "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/Papyrus${BUILD_NAME}/")
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/Plugin${BUILD_NAME}/")
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/Plugin${BUILD_NAME}/")
+if(${CMAKE_BUILD_TYPE} STREQUAL Debug OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/Plugin${BUILD_NAME}/")
+endif()
+file(GLOB_RECURSE OUTPUT_DLLS "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/**/*.dll")
+file(GLOB_RECURSE OUTPUT_PDBS "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/**/*.pdb")
+file(GLOB_RECURSE OUTPUT_SCRIPTS "${CMAKE_CURRENT_SOURCE_DIR}/contrib/Distribution/**/*.pex")
+set_property(TARGET ${PROJECT_NAME}
+        APPEND PROPERTY ADDITIONAL_CLEAN_FILES "${OUTPUT_DLLS}")
+set_property(TARGET ${PROJECT_NAME}
+        APPEND PROPERTY ADDITIONAL_CLEAN_FILES "${OUTPUT_PDBS}")
+set_property(TARGET ${PROJECT_NAME}
+        APPEND PROPERTY ADDITIONAL_CLEAN_FILES "${OUTPUT_SCRIPTS}")
+
+# Automatic deployment to Mod Organizer 2 mod directory.
+foreach(DEPLOY_TARGET $ENV{CommonLibSSESamplePluginTargets})
+    message("Adding deployment target ${DEPLOY_TARGET}.")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_FILE:${PROJECT_NAME}> "${DEPLOY_TARGET}/SKSE/Plugins/")
+    if(${CMAKE_BUILD_TYPE} STREQUAL Debug OR ${CMAKE_BUILD_TYPE} STREQUAL RelWithDebInfo)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy $<TARGET_PDB_FILE:${PROJECT_NAME}> "${DEPLOY_TARGET}/SKSE/Plugins/")
+    endif()
+endforeach()
